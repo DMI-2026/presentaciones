@@ -24,18 +24,28 @@ jobs:
         with:
           node-version: 20
 
-      - name: Build slides with Marp CLI
+      - name: Build every deck under semana-*/ with Marp CLI
         run: |
-          mkdir -p dist/semana-02
-          npx --yes @marp-team/marp-cli@latest semana-02/patrones-diseno.md \
-            -o dist/semana-02/index.html --html
+          set -e
+          mkdir -p dist
+          shopt -s nullglob
+          for f in semana-*/*.md; do
+            dir="dist/$(dirname "$f")"
+            mkdir -p "$dir"
+            npx --yes @marp-team/marp-cli@latest "$f" -o "$dir/index.html" --html
+          done
 
-      - name: Add root redirect
+      - name: Build landing page listing all decks
         run: |
-          cat > dist/index.html << 'HTML'
-          <!doctype html>
-          <meta http-equiv="refresh" content="0; url=semana-02/">
-          HTML
+          {
+            echo '<!doctype html><meta charset="utf-8"><title>Presentaciones DMI-2026</title>'
+            echo '<h1>Presentaciones — Desarrollo Móvil Integral</h1><ul>'
+            for d in dist/semana-*/; do
+              name=$(basename "$d")
+              echo "<li><a href=\"$name/\">$name</a></li>"
+            done
+            echo '</ul>'
+          } > dist/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
