@@ -4,49 +4,85 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref to build (use an older commit to roll back)"
+        required: false
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+# Do NOT set cancel-in-progress: true — cancelling mid-deploy can leave the
+# published site torn. A queued run is the intended behavior.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+env:
+  # Pin the version. "@latest" can major-bump mid-semester and break the build.
+  MARP_VERSION: 4.5.1
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Build every deck under semana-*/ with Marp CLI
+      # Adjust the glob if this project uses a folder convention other than
+      # "semana-NN/". Never hardcode a single filename here.
+      - name: Build every deck and copy its local assets
         run: |
-          set -e
-          mkdir -p dist
+          set -euo pipefail
           shopt -s nullglob
+          mkdir -p dist
+          built=0
           for f in semana-*/*.md; do
-            dir="dist/$(dirname "$f")"
-            mkdir -p "$dir"
-            npx --yes @marp-team/marp-cli@latest "$f" -o "$dir/index.html" --html
+            src_dir="$(dirname "$f")"
+            out_dir="dist/$src_dir"
+            mkdir -p "$out_dir"
+            npx --yes "@marp-team/marp-cli@${MARP_VERSION}" "$f" \
+              -o "$out_dir/index.html" --html
+            # marp-cli does NOT copy local assets and does NOT rewrite
+            # relative paths, so mirror everything except the Markdown.
+            rsync -a --exclude='*.md' "$src_dir/" "$out_dir/"
+            built=$((built + 1))
           done
+          # A renamed folder must fail loudly, not publish an empty site.
+          if [ "$built" -eq 0 ]; then
+            echo "::error::No decks matched semana-*/*.md"
+            exit 1
+          fi
+          # Shared assets referenced as ../assets/... from a deck.
+          if [ -d assets ]; then
+            cp -r assets dist/
+          fi
 
-      - name: Build landing page listing all decks
+      - name: Build landing page and 404
         run: |
+          set -euo pipefail
           {
-            echo '<!doctype html><meta charset="utf-8"><title>Presentaciones DMI-2026</title>'
-            echo '<h1>Presentaciones — Desarrollo Móvil Integral</h1><ul>'
+            echo '<!doctype html><meta charset="utf-8"><title>Presentaciones</title>'
+            echo '<h1>Presentaciones</h1><ul>'
             for d in dist/semana-*/; do
               name=$(basename "$d")
               echo "<li><a href=\"$name/\">$name</a></li>"
             done
             echo '</ul>'
           } > dist/index.html
+          BASE="${GITHUB_REPOSITORY#*/}"
+          printf '<!doctype html><meta charset="utf-8"><title>404</title><h1>404</h1><p><a href="/%s/">Ver todas las presentaciones</a></p>\n' \
+            "$BASE" > dist/404.html
 
+      # Do NOT add .nojekyll: the artifact path never runs Jekyll, and
+      # upload-pages-artifact strips dotfiles anyway.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
