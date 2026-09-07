@@ -49,7 +49,7 @@ jobs:
             out_dir="dist/$src_dir"
             mkdir -p "$out_dir"
             npx --yes "@marp-team/marp-cli@${MARP_VERSION}" "$f" \
-              -o "$out_dir/index.html" --html
+              -o "$out_dir/index.html" --html --bespoke.progress
             # marp-cli does NOT copy local assets and does NOT rewrite
             # relative paths, so mirror everything except the Markdown.
             rsync -a --exclude='*.md' "$src_dir/" "$out_dir/"
