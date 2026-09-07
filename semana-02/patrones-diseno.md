@@ -195,12 +195,6 @@ Flecha permitida: hacia abajo. Flecha rota: Datos → Presentación.
 
 ---
 
-## Prueba de asset local
-
-![w:120](./img/prueba.png)
-
----
-
 ## Referencias
 
 - Gamma, Helm, Johnson, Vlissides. *Design Patterns: Elements of Reusable Object-Oriented Software*. 1994.
